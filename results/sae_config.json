@@ -1,0 +1,13 @@
+{
+ "model_id": "gollem-v5-128m-muon-v1",
+ "hook": "res_post_block",
+ "layers": 16,
+ "d_in": 768,
+ "d_sae": 6144,
+ "k": 50,
+ "lr": 0.001,
+ "batch": 8,
+ "seq": 512,
+ "step": 655,
+ "tokens": 2682880
+}

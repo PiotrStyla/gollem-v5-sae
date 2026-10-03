@@ -1,0 +1,10 @@
+# duze / do pobrania z HF - nie wrzucamy do gita
+model/
+data/
+out/
+release/
+__pycache__/
+*.bin
+*.parquet
+*.safetensors
+*.pt
