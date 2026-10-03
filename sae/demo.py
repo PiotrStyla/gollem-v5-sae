@@ -100,15 +100,18 @@ def cmd_find(args, model, tok):
 
 
 @torch.no_grad()
-def generate(model, ids, steps, inject_layer=None, direction=None, temp=0.0):
+def generate(model, ids, steps, injects=None, temp=0.0):
+    """injects: lista (layer, wektor) dodawana do rezyduali po wskazanych blokach."""
     out = []
     for _ in range(steps):
         x = model.tok(ids)
         v0 = None
         for i, blk in enumerate(model.blocks):
             x, v0 = blk(x, v0)
-            if inject_layer is not None and i == inject_layer:
-                x = x + direction
+            if injects:
+                for L, d in injects:
+                    if i == L:
+                        x = x + d
         logits = model.head(model.lnf(x))[:, -1, :REAL_VOCAB]
         if temp > 0:
             probs = torch.softmax(logits / temp, dim=-1)
@@ -121,12 +124,21 @@ def generate(model, ids, steps, inject_layer=None, direction=None, temp=0.0):
 
 
 def cmd_steer(args, model, tok):
-    sae = load_sae(args.out_dir, args.layer)
+    if args.feature is None and not args.inject:
+        raise SystemExit("podaj --feature albo --inject L:feat:waga")
     ids = encode_text(tok, args.text)
-    direction = sae.W_dec[args.feature].clone() * args.weight
+    if args.inject:
+        pairs = [(int(p.split(":")[0]), int(p.split(":")[1]), float(p.split(":")[2])) for p in args.inject]
+    else:
+        pairs = [(args.layer, args.feature, args.weight)]
+    injects, parts = [], []
+    for L, f, w in pairs:
+        sae = load_sae(args.out_dir, L)
+        injects.append((L, sae.W_dec[f].clone() * w))
+        parts.append(f"L{L} f{f} w{w}")
     base = generate(model, ids.clone(), args.tokens, temp=args.temp)
-    st = generate(model, ids.clone(), args.tokens, inject_layer=args.layer, direction=direction, temp=args.temp)
-    print(f"--- steer: featur {args.feature} @ warstwa {args.layer}, waga {args.weight}")
+    st = generate(model, ids.clone(), args.tokens, injects=injects, temp=args.temp)
+    print(f"--- steer: {', '.join(parts)}")
     print(f"BASE   : {args.text}" + tok.decode(base))
     print(f"STEERED: {args.text}" + tok.decode(st))
 
@@ -154,8 +166,9 @@ def main():
 
     p = sub.add_parser("steer")
     p.add_argument("--text", required=True)
-    p.add_argument("--feature", type=int, required=True)
+    p.add_argument("--feature", type=int, default=None)
     p.add_argument("--weight", type=float, default=15.0)
+    p.add_argument("--inject", nargs="*", default=None, help="L:feat:waga, moze byc wiele (rozne warstwy)")
     p.add_argument("--tokens", type=int, default=20)
     p.add_argument("--temp", type=float, default=0.0)
     p.set_defaults(fn=cmd_steer)

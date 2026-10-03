@@ -49,6 +49,30 @@ Pelne metryki (co 20 krokow): `results/metrics.jsonl`. Wagi i tabela sha256: rep
   - **waga 600: model zmienia tekst** - `BASE: ...The capital of France is Paris. / The capital`
     vs `STEERED: ... History  The city of Paris was founded` (artystyl wikipedyjny)
 
+## Petla powtorzen: znaleziona i czesciowo zabita (narzedzia: `loophunt.py`, `demo.py steer --inject`)
+
+`loophunt.py` mierzy rep_rate (token juz byl w oknie 32) przy generacji greedy i ranguje
+featury po roznicy aktywacji na pozycjach-powtorke vs reszta (6 promptow, rep_rate 0.42-0.92).
+
+- kandydaci siedza w poznych warstwach (L10-L15); top: **L10 f2517** (rep=757 vs non=337)
+- ablacja L10 f2517 (odjecie 0.8 x sredniej aktywacji x W_dec): rep_rate **0.75 -> 0.65**
+- BASE: "The capital of France is the city of Paris. The capital of France is Paris." x6 (petla)
+- STEERED: "The capital of France is Paris. The capital of the United States is New York.
+  The capital of Canada is Ottawa. The capital of Australia is Canberra." (wyliczanka, bez petli)
+
+Uczciwie: to lamie "blokade tresci", ale nie caly mechanizm powtorzen - to degeneracja
+greedy-decodingu rozlozona po sieci (na drugim promptcie petla wraca, w zmienionej tresci).
+Ablacje skojarzone daja najwyzej chwilowa roznorodnosc; **pelny lek = sampling**:
+temp 0.8 (sprawdzone) generuje dlugie, spojne teksty bez powtorzen.
+
+## Katalog featurow (narzedzie: `feature_catalog.py`)
+
+Jeden przebieg po 200k tokenow zbiera top-5 kontekstow dla 97 844 featurow (6144 x 16 warstw)
+i nadaje automatyczna etykiete (dominujacy token + czystosc). Przyklady warstwy 0:
+f0 = " single" (muzyczny singiel, czystosc 1.0), f3 = sufiks "-antry" (infantry/operations).
+Wynik: `results/feature_catalog.md` (top 200/warstwe) + `results/feature_catalog.jsonl`
+(pelny, lokalnie - poza gitem przez rozmiar).
+
 ## Jak uruchomic
 
 ```bash
@@ -77,8 +101,10 @@ sae/topk_sae.py     modul SAE (TopK, untied, unit-norm decoder)
 sae/prep_data.py    parquet wikitext -> tokens.bin (uint16) tokenizatorem modelu
 sae/train_sae.py    trening 16 SAE rownolegle + checkpointy + metryki
 sae/pack_release.py skladanie release pod HF (README z tabela sha256)
-sae/demo.py         probe / find / steer
-results/            metryki treningu (metrics.jsonl, sae_config.json)
+sae/demo.py         probe / find / steer (steer: --inject L:feat:waga, wiele naraz)
+sae/loophunt.py     ranking featurow petli powtorzen + test ablacji
+sae/feature_catalog.py  katalog 98k featurow: top-konteksty + automatyczne etykiety
+results/            metryki treningu, feature_catalog.md (top featury/warstwe)
 ```
 
 Pominiete w repo (za duze / do pobrania): wagi modelu i SAE, korpus, checkpointy posrednie.
